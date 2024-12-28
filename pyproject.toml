@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "data-analysis-convai"
+name = "data-analysis-llm-agent"
 version = "0.1.0"
-description = "Conversation AI for data analysis using Function Calling and Agent Execution. Query database to get result and display it in conversation ux using chainlit"
-authors = ["sourabh shrishrimal"]
-license = "Apache 2.0"
+description = "A conversational AI tool for data analysis leveraging Function Calling and Agent Execution. It queries databases, retrieves results, and presents them through a Chainlit conversational interface."
+authors = ["Jeevannatham V"]
+license = "Apache-2.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.10,<3.11"
 openai = "^1.24.1"
 python-dotenv = "^1.0.1"
 plotly = "^5.21.0"
@@ -15,5 +15,5 @@ psycopg2-binary = "^2.9.9"
 chainlit = "^1.0.506"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

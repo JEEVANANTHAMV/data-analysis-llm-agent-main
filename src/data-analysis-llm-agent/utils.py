@@ -1,40 +1,13 @@
-import sqlite3 
-
-EXTRA_SCHEMA_INFO = """
-"""
-
-
-async def run_db_query(sql_query):
-    connection = None
-    try:
-        # Establish the connection
-        connection = sqlite3.connect('../data/movies.db')
-
-        # Create a cursor object
-        cursor = connection.cursor()
-
-        # Execute the query
-        cursor.execute(sql_query)
-
-        # Fetch the column names
-        column_names = [desc[0] for desc in cursor.description]
-
-        # Fetch all rows
-        result = cursor.fetchall()
-        
-        return result, column_names
-    except sqlite3.Error as error:
-        print("Error while executing the query:", error)
-        return [], []
-    finally:
-        # Close the cursor and connection
-        if connection:
-            cursor.close()
-            connection.close()
-            print("SQLite connection is closed")
-
-
 def generate_postgres_table_info_query(schema_table_pairs):
+    """
+    Generate a query to retrieve table and column metadata from a PostgreSQL database.
+    
+    Parameters:
+    schema_table_pairs (list of tuples): A list of schema and table pairs (schema, table).
+    
+    Returns:
+    str: The SQL query to retrieve table and column information.
+    """
     query = """
     SELECT
         cols.table_schema,
@@ -51,20 +24,20 @@ def generate_postgres_table_info_query(schema_table_pairs):
     WHERE
         (cols.table_schema, cols.table_name) IN ({});
     """.format(', '.join(["('{}', '{}')".format(schema, table) for schema, table in schema_table_pairs]))
-
     return query
 
-def generate_sqlite_table_info_query(schema_table_pairs):
- sql_query = """SELECT 
-    sql
-    FROM 
-    sqlite_master m 
-    WHERE 
-    m.type='table' AND m.name NOT LIKE 'sqlite_%';"""
-
- return sql_query
 
 def format_table_info(results, columns):
+    """
+    Format table information for display.
+    
+    Parameters:
+    results (list): Query results containing table and column metadata.
+    columns (list): Column names for the results.
+    
+    Returns:
+    str: Formatted table information string.
+    """
     table_info = ""
     current_table = None
 
@@ -91,7 +64,18 @@ def format_table_info(results, columns):
 
     return table_info
 
+
 def format_sample_data(column_names, data_records):
+    """
+    Format sample data for display.
+    
+    Parameters:
+    column_names (list): List of column names.
+    data_records (list of tuples): List of data rows.
+    
+    Returns:
+    str: Formatted sample data string.
+    """
     formatted_data = ""
     for col_name in column_names:
         # Get unique non-empty values for the column
@@ -105,38 +89,51 @@ def format_sample_data(column_names, data_records):
 
     return formatted_data
 
+
 def generate_sample_data_query(schema, table, N):
+    """
+    Generate a query to retrieve sample data from a PostgreSQL table.
+    
+    Parameters:
+    schema (str): Schema name.
+    table (str): Table name.
+    N (int): Number of sample rows to fetch.
+    
+    Returns:
+    str: SQL query to fetch sample data.
+    """
     return f"""SELECT * FROM "{schema}"."{table}" ORDER BY RANDOM() LIMIT {N};"""
 
 
-# formatting data
-def convert_to_json1(rows, column_names):
-    results = []
-
-    for row in rows:
-        # Convert row data into a dictionary with column names as keys
-        row_dict = dict(zip(column_names, row))
-        results.append(list(row_dict.values()))  # Append row values as a list
-
-    # Construct the JSON data structure
-    json_data = {"columns": column_names, "data": results}
-    return json_data
-
-
-
-# formatting data
+# Data conversion utilities
 def convert_to_json(rows, column_names):
+    """
+    Convert query results to JSON format.
+    
+    Parameters:
+    rows (list of tuples): Query results as rows.
+    column_names (list): Column names corresponding to the rows.
+    
+    Returns:
+    dict: JSON representation of the query results.
+    """
     results = []
     for row in rows:
         row_dict = dict(zip(column_names, row))
         results.append(row_dict)
-
-        # Serialize the results and column names into a JSON string
-    json_data ={"columns": column_names, "data": results}
-    return json_data
+    return {"columns": column_names, "data": results}
 
 
 def json_to_markdown_table(json_data):
+    """
+    Convert JSON data to a Markdown table format.
+    
+    Parameters:
+    json_data (dict): JSON data with "columns" and "data" keys.
+    
+    Returns:
+    str: Markdown-formatted table as a string.
+    """
     # Extract columns and data from JSON
     columns = json_data["columns"]
     data = json_data["data"]

@@ -1,113 +1,111 @@
-import chainlit as cl
+import streamlit as st
 from dotenv import load_dotenv
 import logging
+from plotly.graph_objs import Figure
+from test_connection import test_postgres_connection
+
+from tools import tools_schema, run_postgres_query, plot_chart
+from bot import ChatBot
 
 # Load environment variables from .env file
 load_dotenv("../.env")
-from plotly.graph_objs import Figure
-
-from utils import generate_sqlite_table_info_query, format_table_info
-from tools import tools_schema, run_sqlite_query, plot_chart
-from bot import ChatBot
 
 # Configure logging
 logging.basicConfig(filename='chatbot.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 logger = logging.getLogger()
-logger.addHandler(logging.FileHandler('chatbot.log'))
 
 MAX_ITER = 5
-schema_table_pairs = []
 
-tool_run_sqlite_query = cl.step(type="tool", show_input="json", language="str")(run_sqlite_query)
-tool_plot_chart = cl.step(type="tool", show_input="json", language="json")(plot_chart)
-original_run_sqlite_query = tool_run_sqlite_query.__wrapped__
-# cl.instrument_openai() 
-# for automatic steps
+# Initialize Streamlit app
+st.set_page_config(page_title="Data Analysis LLM Agent", layout="wide")
+st.title("Data Analysis LLM Agent")
 
-@cl.on_chat_start
-async def on_chat_start():
-    # build schema query
-    table_info_query = generate_sqlite_table_info_query(schema_table_pairs)
+# Sidebar for PostgreSQL configuration
+st.sidebar.title("PostgreSQL Configuration")
+db_host = st.sidebar.text_input("Host")
+db_port = st.sidebar.text_input("Port", value="5432")
+db_user = st.sidebar.text_input("Username")
+db_password = st.sidebar.text_input("Password", type="password")
+db_name = st.sidebar.text_input("Database Name")
 
-    # execute query
-    result, column_names = await original_run_sqlite_query(table_info_query, markdown=False)
+if st.sidebar.button("Test Connection"):
+    db_config = {
+        "db_name": db_name,
+        "db_user": db_user,
+        "db_password": db_password,
+        "db_host": db_host,
+        "db_port": db_port
+    }
+    result = test_postgres_connection(db_config)
+    if "successful" in result.lower():
+        st.sidebar.success(result)
+    else:
+        st.sidebar.error(result)
 
-    # format result into string to be used in prompt
-    # table_info = format_table_info(result, column_names)
-    table_info = '\n'.join([item[0] for item in result])
-
-    system_message = f"""You are an expert in data analysis. You will provided valuable insights for business user based on their request.
-    Before responding, You will make sure that user ask pertains to data analysis on provided schema, else decline.
-    If user request some data, you will build sql query based on the user request for sqlite db from the provided schema/table details and call query_db tools to fetch data from database with the correct/relevant query that gives correct result.
-    You have access to tool to execute database query and get results and to plot the query results.
-    One you have provided the data, you will do reflection to see if you have provided correct data or not. because you don't know the data beforehand but only the schema so you might discover some new insights while reflecting.
-
-    Follow this Guidelines
-    - It is very important that if you need certain inputs to proceed or are not sure about anything, you may ask question, but try to use your intelligence to understand user intention and also let user know if you make assumptions.
-    - In the response message do not provide technical details like sql, table or column details, the response will be read by business user not technical person.
-    - provide rich markdown response - if it is table data show it in markdown table format
-    - In case you get a database error, you will reflect and try to call the correct sql query
-    - Limit top N queries to 5 and let the user know that you have limited results
-    - Limit number of columns to 5-8. Wisely Choose top columns to query in SQL queries based on the user request
-    - when user asks for all records - limit results to 10 and tell them they you are limiting records
-    - in SQL queries to fetch data, you must cast date and numeric columns into readable form(easy to read in string format)
-    - Design robust sql queries that takes care of uppercase, lowercase or some variations because you don't know the complete data or list of enumerable values in columns.
-    - Pay careful attention to the schema and table details I have provided below. Only use columns and tables mentioned in the schema details
-
-    Here are complete schema details with column details:
-    {table_info}"""
-
-    # print(system_message)
+# Function to initialize chatbot
+def initialize_chatbot():
+    system_message = """You are an expert in data analysis. You will provide valuable insights for business users based on their requests.
+    Before responding, ensure the user's query pertains to data analysis on the provided schema, else decline.
+    If a user requests data, you will build an SQL query based on the user's request for the PostgreSQL database and call the `query_db` tool to fetch data from the database with the correct/relevant query that gives the correct result.
+    
+    Follow these guidelines:
+    - If you need certain inputs to proceed or are not sure about anything, ask questions, but try to use your intelligence to understand user intention.
+    - Provide a business-friendly response without technical jargon.
+    - Provide rich Markdown responses, using tables for data and clear formatting.
+    - Limit top N queries to 5 and inform the user of the limit.
+    - Limit results to 10 when users request all records and inform them.
+    - Ensure SQL queries cast date and numeric columns into readable formats.
+    """
     
     tool_functions = {
-        "query_db": tool_run_sqlite_query,
-	    "plot_chart": tool_plot_chart
+        "query_db": lambda query: run_postgres_query(query, {
+            "db_host": db_host,
+            "db_port": db_port,
+            "db_user": db_user,
+            "db_password": db_password,
+            "db_name": db_name
+        }),
+        "plot_chart": plot_chart
     }
+    return ChatBot(system_message, tools_schema, tool_functions)
 
-    cl.user_session.set("bot", ChatBot(system_message, tools_schema, tool_functions))
+# Initialize or load the chatbot
+if "bot" not in st.session_state:
+    st.session_state["bot"] = initialize_chatbot()
 
+bot = st.session_state["bot"]
 
-@cl.on_message
-async def on_message(message: cl.Message):
-    bot = cl.user_session.get("bot")
+# User input section
+user_input = st.text_input("Enter your query:")
 
-    msg = cl.Message(author="Assistant", content="")
-    await msg.send()
+if st.button("Submit"):
+    if user_input:
+        # Display the user's query
+        st.markdown(f"**User:** {user_input}")
 
-    # step 1: user request and first response from the bot
-    response_message = await bot(message.content)
-    msg.content = response_message.content or ""
-    
-    # pending message to be sent
-    if len(msg.content)>0:
-        await msg.update()
+        # Get the bot's response
+        response_message = bot(user_input)
 
+        # Display the bot's response
+        st.markdown(f"**Assistant:** {response_message.content}")
 
-    # step 2: check tool_calls - as long as there are tool calls and it doesn't cross MAX_ITER count, call iteratively
-    cur_iter = 0
-    tool_calls = response_message.tool_calls
-    while cur_iter <= MAX_ITER:
+        # Handle tool calls and iterations
+        cur_iter = 0
+        tool_calls = response_message.tool_calls
+        while cur_iter < MAX_ITER:
+            if tool_calls:
+                # Call the necessary tools and get responses
+                bot.messages.append(response_message)
+                response_message, function_responses = bot.call_functions(tool_calls)
 
-        # if tool_calls:
-        if tool_calls:
-            bot.messages.append(response_message) # add tool call to messages before calling executing function calls
-            response_message, function_responses = await bot.call_functions(tool_calls)
+                # Display bot's updated response
+                st.markdown(f"**Assistant:** {response_message.content}")
 
-            # response_message is response after completing function calls and sending it back to the bot
-            if response_message.content and len(response_message.content)>0:
-                await cl.Message(author="Assistant", content=response_message.content).send()
-
-            # reassign tool_calls from new response
-            tool_calls = response_message.tool_calls
-
-            # some responses like charts should be displayed explicitly
-            function_responses_to_display = [res for res in function_responses if res['name'] in bot.exclude_functions]
-            for function_res in function_responses_to_display:
-                # plot chart
-                if isinstance(function_res["content"], Figure):
-                    chart = cl.Plotly(name="chart", figure=function_res['content'], display="inline")
-                    await cl.Message(author="Assistant", content="", elements=[chart]).send()
-        else:
-            break
-        cur_iter += 1
+                # Display charts if any
+                for function_res in function_responses:
+                    if isinstance(function_res["content"], Figure):
+                        st.plotly_chart(function_res["content"])
+                tool_calls = response_message.tool_calls
+            else:
+                break
+            cur_iter += 1
