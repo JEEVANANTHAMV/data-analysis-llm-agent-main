@@ -1,6 +1,6 @@
 from langchain.agents import Tool, initialize_agent
 from langchain_groq import ChatGroq
-from tools import query_database, extract_table_names, extract_table_schema
+from tools import query_database, extract_table_names, extract_table_schema, generate_graph
 from prompts import Prompts  # Import prompts for reusable logic
 from utils import validate_db_config
 
@@ -9,37 +9,24 @@ class DataAnalysisAgent:
         """
         Initializes the Data Analysis Agent.
         """
-        # Validate database configuration
         validate_db_config(db_config)
-
         self.db_config = db_config
-
-        # Initialize LangChain-Groq LLM
         self.llm = ChatGroq(
-            model_name="mixtral-8x7b-32768",
+            model_name="llama-3.3-70b-versatile",
             temperature=0,
             api_key="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"
         )
-
-        # Initialize LangChain agent with tools
         self.agent = initialize_data_analysis_agent(db_config, self.llm)
 
     def analyze_database(self, user_query):
         """
         Analyzes the database based on user input and returns the result.
-
-        Steps:
-        1. Identify the most relevant table(s).
-        2. Extract the schema of the table.
-        3. Generate SQL based on the user's query and schema.
-        4. Execute the SQL query and return results.
         """
         try:
-            result = self.agent.run(user_query)
+            result = self.agent.invoke(user_query)
             return result
         except Exception as e:
-            return {"error": f"An error occurred during analysis: {e}"}
-
+            return {"error": f"An error occurred during analysis: {str(e)}"}
 
 def create_tools(db_config, llm):
     """
@@ -53,7 +40,7 @@ def create_tools(db_config, llm):
         ),
         Tool(
             name="Extract Table Names",
-            func=lambda _: extract_table_names(db_config),  # Accepts input but ignores it
+            func=lambda _: extract_table_names(db_config),
             description="Extracts table names from the database."
         ),
         Tool(
@@ -62,28 +49,23 @@ def create_tools(db_config, llm):
             description="Extracts the schema of a specified table."
         ),
         Tool(
-            name="Generate SQL Query",
-            func=lambda input_data: generate_sql_query(input_data["user_query"], input_data["table_schema"], llm),
-            description="Generates an SQL query from user input and table schema."
-        ),
+            name="Generate Graph",
+            func=lambda input_data: generate_graph(
+                data=input_data['data'],
+                graph_type=input_data.get('graph_type', 'line'),  # Provide default values
+                title=input_data.get('title', 'Graph Title'),
+                labels=input_data.get('labels', None),
+                xlabel=input_data.get('xlabel', 'X Axis'),
+                ylabel=input_data.get('ylabel', 'Y Axis')
+            ),
+            description="Generates various types of graphs based on input data."
+        )
+        
     ]
-
-def generate_sql_query(user_query, table_schema, llm):
-    """
-    Generates an SQL query using LangChain-Groq and the prompt from prompts.py.
-    """
-    # Use the prompt from Prompts
-    prompt = Prompts.sql_generation_prompt({
-        "user_query": user_query,
-        "table_schema": table_schema
-    })
-    response = llm.invoke([("system", "You are a helpful SQL assistant."), ("human", prompt)])
-    return response.content
-
 
 def initialize_data_analysis_agent(db_config, llm):
     """
     Initializes the LangChain agent with the necessary tools.
     """
     tools = create_tools(db_config, llm)
-    return initialize_agent(tools, llm, agent="zero-shot-react-description", verbose=True)
+    return initialize_agent(tools, llm, agent="structured-chat-zero-shot-react-description", verbose=True, handle_parsing_errors=True)

@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, text
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 def query_database(sql_query, db_config):
     """
@@ -37,19 +38,30 @@ def extract_table_schema(table_name, db_config):
     query = f"""
     SELECT column_name, data_type
     FROM information_schema.columns
-    WHERE table_name = '{table_name}';
+    WHERE table_name = '{table_name.strip()}';
     """
     return query_database(query, db_config)
 
+def generate_graph(data, graph_type="line", title="Graph Title", labels=None, **kwargs):
+    plt.figure(figsize=(10, 5))  # Set the figure size
 
-def generate_sql_query(user_query, table_schema, llm):
-    """
-    Generates an SQL query based on user input and the given table schema using LangChain-Groq.
-    """
-    prompt = f"""
-    User Query: {user_query}
-    Table Schema: {table_schema}
-    Generate an SQL query that satisfies the user's requirement.
-    """
-    response = llm.invoke([("system", "You are a helpful SQL assistant."), ("human", prompt)])
-    return response.content
+    if graph_type == "line":
+        for i, key in enumerate(data):
+            plt.plot(data[key], label=labels[i] if labels else key, **kwargs)
+    elif graph_type == "bar":
+        indices = np.arange(len(data[list(data.keys())[0]]))  # Assuming all data sets are of the same length
+        width = 0.8 / len(data)
+        for i, key in enumerate(data):
+            plt.bar(indices + i * width, data[key], width=width, label=labels[i] if labels else key, **kwargs)
+    elif graph_type == "scatter":
+        for i, key in enumerate(data):
+            plt.scatter(data[key][0], data[key][1], label=labels[i] if labels else key, **kwargs)
+    elif graph_type == "histogram":
+        for i, key in enumerate(data):
+            plt.hist(data[key], bins=kwargs.get('bins', 10), label=labels[i] if labels else key, **kwargs)
+
+    plt.title(title)
+    plt.legend()
+    plt.xlabel(kwargs.get('xlabel', 'X Axis'))
+    plt.ylabel(kwargs.get('ylabel', 'Y Axis'))
+    plt.show()
