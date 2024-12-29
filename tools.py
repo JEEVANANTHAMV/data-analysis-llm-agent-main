@@ -1,17 +1,9 @@
 from sqlalchemy import create_engine, text
-import plotly.graph_objs as go
 
-# Tool: Query Database
+
 def query_database(sql_query, db_config):
     """
-    Executes a SQL query on the database and returns the results.
-
-    Args:
-        sql_query (str): The SQL query to execute.
-        db_config (dict): Database configuration containing host, port, user, password, and dbname.
-
-    Returns:
-        list[dict]: A list of dictionaries representing the query results.
+    Executes a SQL query and returns results or errors.
     """
     db_url = f"postgresql://{db_config['user']}:{db_config['password']}@" \
              f"{db_config['host']}:{db_config['port']}/{db_config['dbname']}"
@@ -19,89 +11,45 @@ def query_database(sql_query, db_config):
     try:
         with engine.connect() as conn:
             result_proxy = conn.execute(text(sql_query))
-            results = [dict(row) for row in result_proxy]
-            return results
+            # Fetch all rows into memory while the connection is active
+            results = result_proxy.fetchall()
+            # Convert results to a list of dictionaries
+            column_names = result_proxy.keys()
+            return [dict(zip(column_names, row)) for row in results]
     except Exception as e:
         return {"error": str(e)}
     finally:
         engine.dispose()
 
-# Tool: Summarize Schema
-def summarize_schema(db_config):
-    """
-    Summarizes the schema of the database by retrieving table and column information.
 
-    Args:
-        db_config (dict): Database configuration.
-
-    Returns:
-        dict: A dictionary summarizing the schema, where keys are table names and values are column info.
+def extract_table_names(db_config):
     """
-    query = """
-    SELECT table_name, column_name, data_type
+    Retrieves table names from the database.
+    """
+    query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
+    return query_database(query, db_config)
+
+
+def extract_table_schema(table_name, db_config):
+    """
+    Retrieves the schema (columns and data types) for a specific table.
+    """
+    query = f"""
+    SELECT column_name, data_type
     FROM information_schema.columns
-    WHERE table_schema = 'public';
+    WHERE table_name = '{table_name}';
     """
-    schema_info = query_database(query, db_config)
-    schema_summary = {}
-    for row in schema_info:
-        table_name = row["table_name"]
-        column_details = f"{row['column_name']} ({row['data_type']})"
-        if table_name not in schema_summary:
-            schema_summary[table_name] = []
-        schema_summary[table_name].append(column_details)
-    return schema_summary
+    return query_database(query, db_config)
 
 
-# Tool: Plot Chart
-def plot_chart(x_values, y_values, title, x_label, y_label, plot_type="bar"):
+def generate_sql_query(user_query, table_schema, llm):
     """
-    Generates a chart using Plotly.
-
-    Args:
-        x_values (list): Values for the x-axis.
-        y_values (list): Values for the y-axis.
-        title (str): Title of the chart.
-        x_label (str): Label for the x-axis.
-        y_label (str): Label for the y-axis.
-        plot_type (str): Type of chart ("bar", "line", "scatter").
-
-    Returns:
-        str: HTML representation of the chart.
+    Generates an SQL query based on user input and the given table schema using LangChain-Groq.
     """
-    if plot_type == "bar":
-        trace = go.Bar(x=x_values, y=y_values)
-    elif plot_type == "line":
-        trace = go.Scatter(x=x_values, y=y_values, mode="lines+markers")
-    elif plot_type == "scatter":
-        trace = go.Scatter(x=x_values, y=y_values, mode="markers")
-    else:
-        raise ValueError("Invalid plot type")
-
-    layout = go.Layout(title=title, xaxis=dict(title=x_label), yaxis=dict(title=y_label))
-    fig = go.Figure(data=[trace], layout=layout)
-    return fig.to_html()
-
-# Tools Registration
-tools = [
-    {
-        "name": "Query Database",
-        "func": query_database,
-        "description": "Execute SQL queries on the database."
-    },
-    {
-        "name": "Summarize Schema",
-        "func": summarize_schema,
-        "description": "Summarize the database schema."
-    },
-    {
-        "name": "Extract Requirements",
-        "func": extract_requirements,
-        "description": "Extract requirements from a user's natural language query."
-    },
-    {
-        "name": "Plot Chart",
-        "func": plot_chart,
-        "description": "Generate visualizations for query results."
-    }
-]
+    prompt = f"""
+    User Query: {user_query}
+    Table Schema: {table_schema}
+    Generate an SQL query that satisfies the user's requirement.
+    """
+    response = llm.invoke([("system", "You are a helpful SQL assistant."), ("human", prompt)])
+    return response.content
