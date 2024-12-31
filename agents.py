@@ -1,7 +1,6 @@
 from langchain.agents import Tool, initialize_agent
 from langchain_groq import ChatGroq
 from tools import query_database, extract_table_names, extract_table_schema, generate_graph
-from prompts import Prompts  # Import prompts for reusable logic
 from utils import validate_db_config
 
 class DataAnalysisAgent:

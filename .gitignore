@@ -6,7 +6,7 @@ __pycache__/
 .env
 
 # Ignore virtual environment directories
-venv/
+.venv/
 env/
 
 # Ignore chainlit configuration folder

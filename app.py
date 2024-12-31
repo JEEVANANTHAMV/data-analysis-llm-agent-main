@@ -3,7 +3,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from agents import DataAnalysisAgent, extract_table_names
 
 # Streamlit UI
-st.title("Database Analysis with LangChain-Groq")
+st.title("Database Analysis with InnoSynth")
 st.sidebar.header("Configuration")
 
 # Collect database credentials from the user
