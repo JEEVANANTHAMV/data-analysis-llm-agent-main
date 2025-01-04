@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
 import numpy as np
+import streamlit as st
 
+@st.cache_data(show_spinner=False)
 def query_database(sql_query, db_config):
     """
     Executes a SQL query and returns results or errors.
@@ -22,7 +24,7 @@ def query_database(sql_query, db_config):
     finally:
         engine.dispose()
 
-
+@st.cache_data(show_spinner=False)
 def extract_table_names(db_config):
     """
     Retrieves table names from the database.
@@ -30,7 +32,7 @@ def extract_table_names(db_config):
     query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';"
     return query_database(query, db_config)
 
-
+@st.cache_data(show_spinner=False)
 def extract_table_schema(table_name, db_config):
     """
     Retrieves the schema (columns and data types) for a specific table.

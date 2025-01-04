@@ -32,6 +32,7 @@ else:
     # User input for query
     st.subheader("Enter Your Query")
     user_query = st.text_area("Query", placeholder="E.g., Find all employees with salaries above $100,000.")
+    user_query = user_query+ "from database and present me as cool html."
 
     if st.button("Analyze Database"):
         if user_query.strip():
@@ -44,7 +45,7 @@ else:
                     else:
                         # Display the generated SQL query and matched table
                         st.success("SQL Query Generated:")
-                        st.write(result)
+                        st.markdown(result['output'],unsafe_allow_html=True)
                 except SQLAlchemyError as e:
                     st.error(f"Database connection failed: {str(e)}")
                 except Exception as e:
