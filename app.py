@@ -29,22 +29,37 @@ else:
     # Initialize the DataAnalysisAgent
     agent = DataAnalysisAgent(db_config)
 
+    # Define system instructions with enhanced prompt engineering
+    system_instructions = """
+Remember:
+- Before generating an answer, first inspect the database schema and preview sample data from each table.
+- This ensures that the SQL query is accurate and tailored to the available columns and data.
+- When generating SQL, always embed table names in escaped double quotes.
+- For example, the SQL should be:
+  SELECT \"BranchName\", COUNT(*) AS count 
+  FROM \"globalanalytics\" 
+  GROUP BY \"BranchName\" 
+  HAVING COUNT(*) > 1;
+"""
+
     # User input for query
     st.subheader("Enter Your Query")
     user_query = st.text_area("Query", placeholder="E.g., Find all employees with salaries above $100,000.")
+    # Append the system instructions to the user query to guide the agent
+    full_query = f"{user_query}\n\nSystem Instructions:\n{system_instructions}"
 
     if st.button("Analyze Database"):
         if user_query.strip():
             with st.spinner("Analyzing..."):
                 try:
                     # Analyze the user query using the agent
-                    result = agent.analyze_database(user_query)
+                    result = agent.analyze_database(full_query)
                     if "error" in result:
                         st.error(result["error"])
                     else:
                         # Display the generated SQL query and matched table
                         st.success("SQL Query Generated:")
-                        st.write(result)
+                        st.markdown(result['output'], unsafe_allow_html=True)
                 except SQLAlchemyError as e:
                     st.error(f"Database connection failed: {str(e)}")
                 except Exception as e:
