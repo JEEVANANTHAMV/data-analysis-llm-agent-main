@@ -34,7 +34,8 @@ jsonschema-specifications==2024.10.1
 kiwisolver==1.4.7
 langchain==0.3.13
 langchain-core==0.3.28
-langchain-groq==0.2.2
+langchain-google-genai
+langchain-community
 langchain-text-splitters==0.3.4
 langsmith==0.2.6
 markdown-it-py==3.0.0

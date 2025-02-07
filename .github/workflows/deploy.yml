@@ -1,21 +1,34 @@
-name: Build Docker Image
+name: Deploy to Google Cloud Run
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
-  build-and-push:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository
+      - name: Configure Git for Long Paths
+        run: |
+          git config --global core.longpaths true
+          git config --global core.symlinks false
+
       - name: Checkout code
         uses: actions/checkout@v3
 
-     - name: Log in to Docker Hub
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -23,21 +36,35 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/LLM-Analyst:$GITHUB_SHA .
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/chat-app:$GITHUB_SHA .
 
       - name: Test Docker Container
         run: |
-          docker run -d -p 8501:8501 --name LLM-Analyst \
-            ${{ secrets.DOCKERHUB_USERNAME }}/LLM-Analyst:$GITHUB_SHA
+          docker run -d -p 8080:8080 --name test_container \
+            ${{ secrets.DOCKERHUB_USERNAME }}/chat-app:$GITHUB_SHA
 
           sleep 10
           
-          if docker ps --filter "name=LLM-Analyst" --filter "status=running" | grep LLM-Analyst; then
+          if docker ps --filter "name=test_container" --filter "status=running" | grep test_container; then
             echo "✅ Container started successfully!"
-            docker stop LLM-Analyst
-            docker rm LLM-Analyst
+            docker stop test_container
+            docker rm test_container
           else
             echo "❌ Container failed to start. Fetching logs..."
-            docker logs LLM-Analyst || echo "⚠️ No logs available"
+            docker logs test_container || echo "⚠️ No logs available"
             exit 1
           fi
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/chat-app:$GITHUB_SHA
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy chat-app \
+            --image docker.io/${{ secrets.DOCKERHUB_USERNAME }}/chat-app:$GITHUB_SHA \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --min-instances=1 \
+            --max-instances=3

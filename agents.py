@@ -13,7 +13,7 @@ class DataAnalysisAgent:
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash-exp",
             temperature=0,
-            google_api_key="AIzaSyDKZz8Ckn_o-Pe4LRZBzmJcfGEVaZEWnJ8"  # Replace with your valid API key
+            google_api_key="AIzaSyDKZz8Ckn_o-Pe4LRZBzmJcfGEVaZEWnJ8"
         )
         self.agent = initialize_data_analysis_agent(db_config, self.llm)
 
